@@ -61,6 +61,25 @@ except AttributeError:
     # PyQt5の場合
     USER_ROLE = Qt.UserRole
 
+# PyQt5/PyQt6 互換: LeftDockWidgetArea の取得
+def _resolve_left_dock_widget_area():
+    try:
+        return Qt.LeftDockWidgetArea
+    except Exception:
+        pass
+    try:
+        # PyQt6: enum nested under DockWidgetArea
+        return Qt.DockWidgetArea.LeftDockWidgetArea
+    except Exception:
+        pass
+    try:
+        # 最終手段:属性があるかチェックして返す
+        return getattr(Qt, 'LeftDockWidgetArea', None)
+    except Exception:
+        return None
+
+LEFT_DOCK_WIDGET_AREA = _resolve_left_dock_widget_area()
+
 # ログ出力関数
 def log_message(message, level=Qgis.Info):
     """QGIS のログメッセージタブに出力"""
@@ -641,8 +660,19 @@ class GeoReport:
                 left_docks = []
                 for widget in self.iface.mainWindow().findChildren(QDockWidget):
                     area = self.iface.mainWindow().dockWidgetArea(widget)
-                    if area == Qt.LeftDockWidgetArea and widget.isVisible():
-                        left_docks.append(widget)
+                    try:
+                        if LEFT_DOCK_WIDGET_AREA is not None:
+                            if area == LEFT_DOCK_WIDGET_AREA and widget.isVisible():
+                                left_docks.append(widget)
+                        else:
+                            # 最終フォールバック: 名前から判定
+                            try:
+                                if hasattr(area, 'name') and area.name == 'LeftDockWidgetArea' and widget.isVisible():
+                                    left_docks.append(widget)
+                            except Exception:
+                                pass
+                    except Exception:
+                        continue
                 if left_docks:
                     # 左側ドック群のうち「高さ（ピクセル）が最大」のウィジェットをターゲットにする
                     # frameGeometry().height() を優先的に使用し、取得できない場合は widget.size().height() を参照
@@ -665,7 +695,17 @@ class GeoReport:
                 
                 if target_dock:
                     # 既存のドックが見つかった場合、タブ化して追加
-                    self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                    try:
+                        if LEFT_DOCK_WIDGET_AREA is not None:
+                            self.iface.addDockWidget(LEFT_DOCK_WIDGET_AREA, self.dock_widget)
+                        else:
+                            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                    except Exception:
+                        # 最後の手段で元の呼び出しを試す
+                        try:
+                            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                        except Exception:
+                            pass
                     # ターゲットドックにタブとして追加
                     self.iface.mainWindow().tabifyDockWidget(target_dock, self.dock_widget)
                     # タブバー上で新しく追加したタブを先頭（上位）に移動する
@@ -692,7 +732,16 @@ class GeoReport:
                         pass
                 else:
                     # 既存のドックがない場合は通常追加
-                    self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                    try:
+                        if LEFT_DOCK_WIDGET_AREA is not None:
+                            self.iface.addDockWidget(LEFT_DOCK_WIDGET_AREA, self.dock_widget)
+                        else:
+                            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                    except Exception:
+                        try:
+                            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+                        except Exception:
+                            pass
                 
                 # 作成したパネルをアクティブに
                 self.dock_widget.raise_()
